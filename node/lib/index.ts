@@ -1,30 +1,12 @@
-interface WasmExports {
-    memory: WebAssembly.Memory;
-    alloc: (size: number) => number;
-    dealloc: (ptr: number, size: number) => void;
-    tl_parse: (ptr: number, opts: number) => number;
-    tl_dom_version: (ptr: number) => number;
-    tl_dom_nodes_count: (ptr: number) => number;
-    tl_dom_get_element_by_id: (ptr: number, id: number) => number;
-    tl_node_inner_text: (ptr: number, id: number) => number;
-    tl_node_inner_html: (ptr: number, id: number) => number;
-    tl_node_is_tag: (ptr: number, id: number) => boolean;
-    tl_node_is_raw: (ptr: number, id: number) => boolean;
-    tl_node_is_comment: (ptr: number, id: number) => boolean;
-    tl_node_tag_name: (ptr: number, id: number) => number;
-    tl_node_tag_attributes_count: (ptr: number, id: number) => number;
-    tl_node_tag_attributes_get: (ptr: number, id: number, str: number) => number;
-    tl_dom_subnodes: (ptr: number) => number;
-    tl_dom_children: (ptr: number) => number;
-    tl_dom_children_index: (slice_ptr: number, slice_len: number, at: number) => number;
-    drop_collection_vtable: (ptr: number) => void;
-    drop_c_string: (ptr: number) => void;
-    drop_node_handle_option: (ptr: number) => void;
-    drop_c_string_option: (ptr: number) => void;
-    drop_dom: (ptr: number) => void;
-}
+import { WasmExports } from './bindings';
+
+let _wasm: WasmExports;
+let initializerCallback: WasmBinaryCallback = defaultCallback;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 export type WasmBinaryCallback = () => Promise<ArrayBuffer>;
+
 function defaultCallback() {
     // @ts-ignore
     const fs = require('fs/promises');
@@ -32,15 +14,24 @@ function defaultCallback() {
     return fs.readFile(`${__dirname}/bindings.wasm`);
 }
 
-let _wasm: WasmExports;
-let initializerCallback: WasmBinaryCallback = defaultCallback;
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
+/**
+ * Sets the initializer callback function.
+ * 
+ * This can be used to override the default WebAssembly binary loading mechanism.
+ * You might want to use this if you want to load the binary from a different location (e.g. CDN),
+ * or you are using this library in the browser and `require('fs')` is not available.
+ */
 export function setInitializerCallback(cb: WasmBinaryCallback) {
     initializerCallback = cb;
 }
 
+/**
+ * Sets the WebAssembly module.
+ * 
+ * This sets the underlying module that is used to interact with the HTML parser written in Rust.
+ * You might want to use this if you want to use a different WebAssembly module than the one shipped with this library,
+ * or if you want to instantiate the module beforehand.
+ */
 export function setWasmExports(wasm: WasmExports) {
     _wasm = wasm;
 }
@@ -400,7 +391,7 @@ export class Attributes {
         this.nodeId = nodeId;
     }
 
-    /***
+    /**
      * Returns the number of attributes
      */
     count() {
@@ -429,7 +420,7 @@ enum RawParserOptions {
     TRACK_CLASSES = 1 << 1
 }
 
-/***
+/**
  * Options to use for the HTML parser
  */
 export class ParserOptions {
@@ -437,7 +428,7 @@ export class ParserOptions {
     constructor() {
         this.flags = 0;
     }
-    /***
+    /**
      * Enables tracking of HTML Tag IDs.
      * 
      * The parser will cache tags during parsing on the fly.
@@ -446,7 +437,7 @@ export class ParserOptions {
     trackTagIds() {
         this.flags |= RawParserOptions.TRACK_IDS;
     }
-    /***
+    /**
      * Enables tracking of HTML Tag class names.
      * 
      * The parser will cache tags during parsing on the fly.
@@ -455,7 +446,7 @@ export class ParserOptions {
     trackTagClasses() {
         this.flags |= RawParserOptions.TRACK_CLASSES;
     }
-    /***
+    /**
      * Returns the inner raw flags
      */
     toNumber() {
@@ -463,7 +454,7 @@ export class ParserOptions {
     }
 }
 
-/***
+/**
  * Parses a string into a DOM tree.
  * 
  * The first call to this function instantiates the WebAssembly module, which is quite expensive.
