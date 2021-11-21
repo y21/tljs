@@ -2,7 +2,7 @@ interface WasmExports {
     memory: WebAssembly.Memory;
     alloc: (size: number) => number;
     dealloc: (ptr: number, size: number) => void;
-    tl_parse: (ptr: number) => number;
+    tl_parse: (ptr: number, opts: number) => number;
     tl_dom_version: (ptr: number) => number;
     tl_dom_nodes_count: (ptr: number) => number;
     tl_dom_get_element_by_id: (ptr: number, id: number) => number;
@@ -138,7 +138,10 @@ enum DowncastTarget {
     COMMENT,
 }
 
-class Node {
+/**
+ * A handle to a node in the DOM tree.
+ */
+export class Node {
     protected dom: Dom;
     protected id: number;
     constructor(dom: Dom, id: number) {
@@ -146,7 +149,7 @@ class Node {
         this.id = id;
     }
 
-    downcastable(kind: DowncastTarget) {
+    private downcastable(kind: DowncastTarget) {
         switch (kind) {
             case DowncastTarget.TAG:
                 return _wasm.tl_node_is_tag(this.dom.getPointer(), this.id);
@@ -157,56 +160,89 @@ class Node {
         }
     }
 
+    /**
+     * Returns the inner text of this node.
+     */
     innerText() {
         this.dom.throwIfResourceFreed();
         const sptr = _wasm.tl_node_inner_text(this.dom.getPointer(), this.id);
         return readCString(sptr);
     }
 
+    /**
+     * Returns the inner HTML of this node.
+     */
     innerHTML() {
         this.dom.throwIfResourceFreed();
         const sptr = _wasm.tl_node_inner_html(this.dom.getPointer(), this.id);
         return readCString(sptr);
     }
 
+    /**
+     * Attempts to downcast this node handle to a concrete HTML tag.
+     * Some operations are only valid on HTML tags.
+     */
     asTag() {
         return this.downcastable(DowncastTarget.TAG) ? new Tag(this.dom, this.id) : null;
     }
 
+    /**
+     * Attempts to downcast this node handle to a raw HTML node (text).
+     */
     asRaw() {
         return this.downcastable(DowncastTarget.RAW) ? new RawTag(this.dom, this.id) : null;
     }
 
+    /**
+     * Attempts to downcast this node handle to an HTML comment (<!-- comment -->).
+     */
     asComment() {
         return this.downcastable(DowncastTarget.COMMENT) ? new Comment(this.dom, this.id) : null;
     }
 }
 
-class Tag extends Node {
+/**
+ * A handle to a tag that was downcasted from a node
+ */
+export class Tag extends Node {
     constructor(dom: Dom, id: number) {
         super(dom, id);
     }
 
+    /**
+     * Returns the name of this tag
+     */
     name() {
         this.dom.throwIfResourceFreed();
         const sptr = _wasm.tl_node_tag_name(this.dom.getPointer(), this.id);
         return readCString(sptr);
     }
 
+    /**
+     * Returns a handle to attributes of this HTML tag
+     */
     attributes() {
         this.dom.throwIfResourceFreed();
         return new Attributes(this.dom, this.id);
     }
 }
 
-class RawTag extends Node { }
-class Comment extends Node { }
+export class RawTag extends Node { }
+export class Comment extends Node { }
 
-class Dom extends Resource {
+/**
+ * The main DOM
+ */
+export class Dom extends Resource {
     constructor(ptr: number) {
         super(ptr);
     }
 
+    /**
+     * Looks up an element by its ID
+     * 
+     * If ID tracking was previously enabled, this operation is ~O(1), otherwise it is O(n)
+     */
     getElementById(id: string) {
         this.throwIfResourceFreed();
         const sptr = writeCStringChecked(id);
@@ -217,6 +253,9 @@ class Dom extends Resource {
         return isSome ? new Node(this, nodeId) : null;
     }
 
+    /**
+     * Returns a handle to a collection of *all* elements in the DOM
+     */
     nodes() {
         this.throwIfResourceFreed();
         const tuplePtr = _wasm.tl_dom_subnodes(this.ptr);
@@ -224,6 +263,9 @@ class Dom extends Resource {
         return new GlobalNodeCollection(this, slicePtr, sliceLen);
     }
 
+    /**
+     * Returns a handle to a collection of direct subnodes ("children") of this DOM (i.e. <html>)
+     */
     children() {
         this.throwIfResourceFreed();
         const tuplePtr = _wasm.tl_dom_children(this.ptr);
@@ -231,41 +273,60 @@ class Dom extends Resource {
         return new ChildrenCollection(this, slicePtr, sliceLen);
     }
 
+    /**
+     * Returns the number of elements in the DOM
+     */
     nodeCount() {
         this.throwIfResourceFreed();
         return _wasm.tl_dom_nodes_count(this.ptr);
     }
 
+    /**
+     * Returns the version of this HTML document
+     */
     version() {
         this.throwIfResourceFreed();
         const ord = _wasm.tl_dom_version(this.ptr);
         return numberToHTMLVersion(ord);
     }
 
+    /**
+     * Frees the underlying WebAssembly memory associated to this DOM
+     * 
+     * Calling this function will invalidate any handle that points to this DOM in any way.
+     * Attempting to use a resource after it's been freed will throw an exception.
+     * You must call this function explicitly when you are done with the DOM.
+     */
     free() {
         super.free();
         _wasm.drop_dom(this.ptr);
     }
 }
 
+/**
+ * The version of this HTML document
+ */
 export enum HTMLVersion {
     HTML5,
-    StrictHTML401,
-    TransitionalHTML401,
-    FramesetHTML401
+    STRICT_HTML401,
+    TRANSITIONAL_HTML401,
+    FRAMESET_HTML401
 }
 
 // https://github.com/y21/tl/blob/b125f9de78f4247c65c42804040f2e7cb0810504/src/parser/base.rs#L15
 function numberToHTMLVersion(ord: number) {
     switch (ord) {
         case 0: return HTMLVersion.HTML5;
-        case 1: return HTMLVersion.StrictHTML401;
-        case 2: return HTMLVersion.TransitionalHTML401;
-        case 3: return HTMLVersion.FramesetHTML401;
+        case 1: return HTMLVersion.STRICT_HTML401;
+        case 2: return HTMLVersion.TRANSITIONAL_HTML401;
+        case 3: return HTMLVersion.FRAMESET_HTML401;
     }
 }
 
-abstract class Collection<T> {
+/**
+ * A base class for collections
+ */
+export abstract class Collection<T> {
     protected dom: Dom;
     protected ptr: number;
     protected len: number;
@@ -279,38 +340,59 @@ abstract class Collection<T> {
     abstract length(): number;
 }
 
-class ChildrenCollection extends Collection<Node> {
+/**
+ * A collection of subnodes of a particular node, or the DOM.
+ */
+export class ChildrenCollection extends Collection<Node> {
     constructor(dom: Dom, ptr: number, len: number) {
         super(dom, ptr, len);
     }
 
+    /**
+     * Returns the node at the given index.
+     */
     at(index: number) {
         if (index < 0 || index >= this.len) return null;
         const nodeId = _wasm.tl_dom_children_index(this.ptr, this.len, index);
         return new Node(this.dom, nodeId);
     }
 
+    /**
+     * Returns the number of nodes in the collection.
+     */
     length() {
         return this.len;
     }
 }
 
-class GlobalNodeCollection extends Collection<Node> {
+/**
+ * A collection of global nodes
+ */
+export class GlobalNodeCollection extends Collection<Node> {
     constructor(dom: Dom, ptr: number, len: number) {
         super(dom, ptr, len);
     }
 
+    /**
+     * Returns the node at the given index
+     */
     at(index: number) {
         if (index < 0 || index >= this.len) return null;
         return new Node(this.dom, index);
     }
 
+    /**
+     * Returns the number of nodes in the collection
+     */
     length() {
         return this.len;
     }
 }
 
-class Attributes {
+/**
+ * HTML Tag Attributes
+ */
+export class Attributes {
     protected dom: Dom;
     protected nodeId: number;
     constructor(dom: Dom, nodeId: number) {
@@ -318,11 +400,17 @@ class Attributes {
         this.nodeId = nodeId;
     }
 
+    /***
+     * Returns the number of attributes
+     */
     count() {
         this.dom.throwIfResourceFreed();
         return _wasm.tl_node_tag_attributes_count(this.dom.getPointer(), this.nodeId);
     }
 
+    /**
+     * Looks up an attribute by key
+     */
     get(key: string) {
         this.dom.throwIfResourceFreed();
         const sptr = writeCStringChecked(key);
@@ -335,9 +423,56 @@ class Attributes {
     }
 }
 
-export async function parse(input: string): Promise<Dom> {
+enum RawParserOptions {
+    NONE = 0,
+    TRACK_IDS = 1 << 0,
+    TRACK_CLASSES = 1 << 1
+}
+
+/***
+ * Options to use for the HTML parser
+ */
+export class ParserOptions {
+    private flags: number;
+    constructor() {
+        this.flags = 0;
+    }
+    /***
+     * Enables tracking of HTML Tag IDs.
+     * 
+     * The parser will cache tags during parsing on the fly.
+     * Enabling this makes `getElementById()` lookups ~O(1)
+     */
+    trackTagIds() {
+        this.flags |= RawParserOptions.TRACK_IDS;
+    }
+    /***
+     * Enables tracking of HTML Tag class names.
+     * 
+     * The parser will cache tags during parsing on the fly.
+     * Enabling this makes `getElementsByClassName()` lookups ~O(1)
+     */
+    trackTagClasses() {
+        this.flags |= RawParserOptions.TRACK_CLASSES;
+    }
+    /***
+     * Returns the inner raw flags
+     */
+    toNumber() {
+        return this.flags;
+    }
+}
+
+/***
+ * Parses a string into a DOM tree.
+ * 
+ * The first call to this function instantiates the WebAssembly module, which is quite expensive.
+ * Subsequent calls reuse the WebAssembly module.
+ */
+export async function parse(input: string, options?: ParserOptions): Promise<Dom> {
+    options ??= new ParserOptions();
     const wasm = await getWasm();
     const ptr = writeCStringChecked(input);
-    const dom = wasm.tl_parse(ptr);
+    const dom = wasm.tl_parse(ptr, options.toNumber());
     return new Dom(dom);
 }

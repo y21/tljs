@@ -22,19 +22,20 @@ dom.free();
 
 ## Benchmark
 ```
-tljs               : 0.919965 ms/file ± 0.932074
-htmlparser2        : 2.23830 ms/file ± 3.73695
-html5parser        : 2.37009 ms/file ± 3.44304
-htmlparser2-dom    : 2.85247 ms/file ± 4.16031
-node-html-parser   : 2.94823 ms/file ± 2.16909
-neutron-html5parser: 3.31393 ms/file ± 2.02473
-html-dom-parser    : 3.95468 ms/file ± 5.49152
-libxmljs           : 4.92975 ms/file ± 3.47270
-htmljs-parser      : 6.90960 ms/file ± 8.30913
-parse5             : 9.74852 ms/file ± 7.31035
-htmlparser         : 17.4388 ms/file ± 108.846
-html-parser        : 35.8347 ms/file ± 26.1177
-saxes              : 53.5032 ms/file ± 148.738
-html5              : 109.779 ms/file ± 136.509
+tl                 : 0.813267 ms/file ± 0.915871
+htmlparser2        : 2.21103 ms/file ± 3.75915
+html5parser        : 2.21831 ms/file ± 3.08665
+node-html-parser   : 2.76944 ms/file ± 2.12705
+htmlparser2-dom    : 2.78516 ms/file ± 4.22202
+neutron-html5parser: 3.14495 ms/file ± 1.91157
+html-dom-parser    : 4.31989 ms/file ± 6.27053
+htmljs-parser      : 5.67571 ms/file ± 7.29359
+parse5             : 9.14692 ms/file ± 7.22142
+htmlparser         : 16.8457 ms/file ± 107.327
+html-parser        : 32.9808 ms/file ± 24.9450
+saxes              : 49.6793 ms/file ± 139.432
+html5              : 110.896 ms/file ± 143.748
 ```
-Benchmark suite: [https://github.com/AndreasMadsen/htmlparser-benchmark](AndreasMadsen/htmlparser-benchmark)
+Benchmarked against real world data using [AndreasMadsen/htmlparser-benchmark](https://github.com/AndreasMadsen/htmlparser-benchmark)
+
+*Note: This benchmark only measures raw HTML parsing, not DOM interaction.*
