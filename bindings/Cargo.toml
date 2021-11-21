@@ -1,0 +1,11 @@
+[package]
+name = "bindings"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+tl = { git = "https://github.com/y21/tl", branch = "next" }
+
+[lib]
+crate-type = ["cdylib"]

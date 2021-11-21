@@ -1,0 +1,15 @@
+{
+  "name": "@y21/tljs",
+  "version": "0.1.1",
+  "description": "A very fast HTML5 parser",
+  "main": "node/dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^16.11.9"
+  }
+}
