@@ -1,6 +1,7 @@
-use std::ffi::CString;
+use std::{ffi::CString, mem::ManuallyDrop};
 
 use option::FFIOption;
+use tl::NodeHandle;
 
 mod mem;
 mod option;
@@ -39,6 +40,28 @@ pub unsafe extern "C" fn tl_dom_get_element_by_id(
     let id = CString::from_raw(str_ptr).into_string().unwrap();
     let element = dom.get_element_by_id(id.as_str().into());
     Box::into_raw(Box::new(element.into()))
+}
+
+// todo: optimise
+#[no_mangle]
+pub unsafe extern "C" fn tl_dom_get_elements_by_class_name(
+    dom_ptr: *mut Dom,
+    str_ptr: *mut i8,
+) -> *mut [usize; 3] {
+    let dom = (*dom_ptr).get_ref();
+    let class_name = CString::from_raw(str_ptr).into_string().unwrap();
+    let mut elements = ManuallyDrop::new(
+        dom.get_elements_by_class_name(class_name.as_str().into())
+            .collect::<Vec<NodeHandle>>(),
+    );
+
+    let (ptr, len, cap) = (
+        elements.as_mut_ptr() as usize,
+        elements.len() as usize,
+        elements.capacity() as usize,
+    );
+
+    Box::into_raw(Box::new([ptr, len, cap]))
 }
 
 #[no_mangle]
@@ -199,4 +222,13 @@ define_generic_destructors! {
 #[no_mangle]
 pub unsafe extern "C" fn drop_c_string(ptr: *mut i8) {
     drop(CString::from_raw(ptr));
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn drop_collection(ptr: *mut [usize; 3]) {
+    let parts = Box::from_raw(ptr);
+    let vptr = parts[0] as *mut NodeHandle;
+    let len = parts[1];
+    let cap = parts[2];
+    drop(Vec::from_raw_parts(vptr, len, cap));
 }

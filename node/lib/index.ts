@@ -102,6 +102,15 @@ function readSliceVTable(ptr: number): [number, number] {
     return [slicePtr, sliceLen];
 }
 
+function readVecVTable(ptr: number): [number, number, number] /* ptr, len, cap */ {
+    return withMemory((dv) => {
+        const vptr = dv.getUint32(ptr, true);
+        const len = dv.getUint32(ptr + 4, true);
+        const cap = dv.getUint32(ptr + 8, true);
+        return [vptr, len, cap];
+    });
+}
+
 abstract class Resource {
     protected freed: boolean = false;
     protected ptr: number;
@@ -242,6 +251,29 @@ export class Dom extends Resource {
         _wasm.drop_node_handle_option(maybeNodeIdPtr);
 
         return isSome ? new Node(this, nodeId) : null;
+    }
+
+    /**
+     * Returns an array of nodes that match the given class name
+     */
+    getElementsByClassName(className: string) {
+        // todo: this can be optimised a lot
+        this.throwIfResourceFreed();
+        const sptr = writeCStringChecked(className);
+        const collectionParts = _wasm.tl_dom_get_elements_by_class_name(this.ptr, sptr);
+        const [ptr, len] = readVecVTable(collectionParts);
+        const nodes = Array<Node>(len);
+
+        withMemory((dv) => {
+            for (let i = 0; i < len; i++) {
+                const nodeId = dv.getUint32(ptr + i * 4, true);
+                nodes[i] = new Node(this, nodeId);
+            }
+        });
+
+        _wasm.drop_collection(collectionParts);
+
+        return nodes;
     }
 
     /**
