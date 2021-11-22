@@ -26,6 +26,15 @@ export function setInitializerCallback(cb: WasmBinaryCallback) {
 }
 
 /**
+ * Attempts to initialize the WebAssembly module using the registered callback
+ */
+export async function initializeWasm() {
+    const binary = await initializerCallback();
+    const module = await WebAssembly.instantiate(binary);
+    _wasm = module.instance.exports as any;
+}
+
+/**
  * Sets the WebAssembly module.
  * 
  * This sets the underlying module that is used to interact with the HTML parser written in Rust.
@@ -37,10 +46,8 @@ export function setWasmExports(wasm: WasmExports) {
 }
 
 async function getWasm(): Promise<WasmExports> {
-    if (_wasm) return _wasm;
-    const binary = await initializerCallback();
-    const module = await WebAssembly.instantiate(binary);
-    return _wasm = module.instance.exports as any;
+    if (!_wasm) await initializeWasm();
+    return _wasm;
 }
 
 function withMemory<T>(callback: (dv: DataView) => T): T {
@@ -446,44 +453,41 @@ export class Attributes {
     }
 }
 
+/**
+ * Options to use for the HTML parser.
+ * The default options are optimized for raw parsing speed.
+ */
+export interface ParserOptions {
+    /**
+     * Enables tracking of HTML Tag IDs.
+     * 
+     * The parser will cache tags during parsing on the fly.
+     * Enabling this makes `getElementById()` lookups ~O(1).
+     * Default: false
+     */
+    trackIds?: boolean,
+    /**
+     * Enables tracking of HTML Tag class names.
+     * 
+     * The parser will cache tags during parsing on the fly.
+     * Enabling this makes `getElementsByClassName()` lookups ~O(1),
+     * at the cost of a lot of hashing.
+     * Default: false
+     */
+    trackClasses?: boolean
+}
+
 enum RawParserOptions {
     NONE = 0,
     TRACK_IDS = 1 << 0,
     TRACK_CLASSES = 1 << 1
 }
 
-/**
- * Options to use for the HTML parser
- */
-export class ParserOptions {
-    private flags: number;
-    constructor() {
-        this.flags = 0;
-    }
-    /**
-     * Enables tracking of HTML Tag IDs.
-     * 
-     * The parser will cache tags during parsing on the fly.
-     * Enabling this makes `getElementById()` lookups ~O(1)
-     */
-    trackTagIds() {
-        this.flags |= RawParserOptions.TRACK_IDS;
-    }
-    /**
-     * Enables tracking of HTML Tag class names.
-     * 
-     * The parser will cache tags during parsing on the fly.
-     * Enabling this makes `getElementsByClassName()` lookups ~O(1)
-     */
-    trackTagClasses() {
-        this.flags |= RawParserOptions.TRACK_CLASSES;
-    }
-    /**
-     * Returns the inner raw flags
-     */
-    toNumber() {
-        return this.flags;
-    }
+function optionsToNumber(options: ParserOptions) {
+    let flags = 0;
+    if (options.trackIds) flags |= RawParserOptions.TRACK_IDS;
+    if (options.trackClasses) flags |= RawParserOptions.TRACK_CLASSES;
+    return flags;
 }
 
 /**
@@ -491,11 +495,14 @@ export class ParserOptions {
  * 
  * The first call to this function instantiates the WebAssembly module, which is quite expensive.
  * Subsequent calls reuse the WebAssembly module.
+ * You can initialize the WebAssembly module beforehand by calling `initializeWasm()`
  */
-export async function parse(input: string, options?: ParserOptions): Promise<Dom> {
-    options ??= new ParserOptions();
+export async function parse(input: string, options: ParserOptions = {}): Promise<Dom> {
+    options.trackClasses = options.trackClasses ?? false;
+    options.trackIds = options.trackIds ?? false;
+
     const wasm = await getWasm();
     const ptr = writeCStringChecked(input);
-    const dom = wasm.tl_parse(ptr, options.toNumber());
+    const dom = wasm.tl_parse(ptr, optionsToNumber(options));
     return new Dom(dom);
 }

@@ -1,0 +1,7 @@
+{
+    "entryPoints": ["node/lib"],
+    "out": "docs/",
+    "readme": "README.md",
+    "name": "tljs",
+    "tsconfig": "./tsconfig.json"
+  }

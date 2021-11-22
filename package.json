@@ -1,6 +1,6 @@
 {
   "name": "@y21/tljs",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A very fast HTML5 parser",
   "main": "node/dist/index.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^16.11.9"
+    "@types/node": "^16.11.9",
+    "typedoc": "^0.22.9"
   }
 }

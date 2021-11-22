@@ -2,3 +2,4 @@ bindings/target
 bindings/Cargo.lock
 node/dist
 node/test
+node_modules
