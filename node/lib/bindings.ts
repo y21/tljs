@@ -7,6 +7,8 @@ export interface WasmExports {
     tl_dom_nodes_count: (ptr: number) => number;
     tl_dom_get_element_by_id: (ptr: number, id: number) => number;
     tl_dom_get_elements_by_class_name: (ptr: number, class_name: number) => number;
+    tl_dom_query_selector_single: (ptr: number, selector: number) => number;
+    tl_dom_query_selector_all: (ptr: number, selector: number) => number;
     tl_node_inner_text: (ptr: number, id: number) => number;
     tl_node_inner_html: (ptr: number, id: number) => number;
     tl_node_is_tag: (ptr: number, id: number) => boolean;

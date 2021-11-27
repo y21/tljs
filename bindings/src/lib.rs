@@ -38,7 +38,7 @@ pub unsafe extern "C" fn tl_dom_get_element_by_id(
 ) -> *mut FFIOption<tl::NodeHandle> {
     let dom = (*dom_ptr).get_ref();
     let id = CString::from_raw(str_ptr).into_string().unwrap();
-    let element = dom.get_element_by_id(id.as_str().into());
+    let element = dom.get_element_by_id(id.as_str());
     Box::into_raw(Box::new(element.into()))
 }
 
@@ -51,7 +51,7 @@ pub unsafe extern "C" fn tl_dom_get_elements_by_class_name(
     let dom = (*dom_ptr).get_ref();
     let class_name = CString::from_raw(str_ptr).into_string().unwrap();
     let mut elements = ManuallyDrop::new(
-        dom.get_elements_by_class_name(class_name.as_str().into())
+        dom.get_elements_by_class_name(class_name.as_str())
             .collect::<Vec<NodeHandle>>(),
     );
 
@@ -199,6 +199,44 @@ pub unsafe extern "C" fn tl_dom_children_index(
     let slice = std::slice::from_raw_parts(slice, len);
     let node = slice[at].get_inner();
     tl::NodeHandle::new(node)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tl_dom_query_selector_single(
+    dom_ptr: *mut Dom,
+    selector: *mut i8,
+) -> *mut FFIOption<tl::NodeHandle> {
+    let dom = (*dom_ptr).get_ref();
+    let selector = CString::from_raw(selector).into_string().unwrap();
+    let node: FFIOption<_> = dom
+        .query_selector(&selector)
+        .and_then(|mut selector| selector.next())
+        .into();
+
+    Box::into_raw(Box::new(node))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tl_dom_query_selector_all(
+    dom_ptr: *mut Dom,
+    selector: *mut i8,
+) -> *mut [usize; 3] {
+    let dom = (*dom_ptr).get_ref();
+    let selector = CString::from_raw(selector).into_string().unwrap();
+    let handles = dom
+        .query_selector(&selector)
+        .map(|selector| selector.collect::<Vec<_>>())
+        .map(ManuallyDrop::new);
+
+    if let Some(mut handles) = handles {
+        Box::into_raw(Box::new([
+            handles.as_mut_ptr() as usize,
+            handles.len() as usize,
+            handles.capacity() as usize,
+        ]))
+    } else {
+        std::ptr::null_mut()
+    }
 }
 
 macro_rules! define_generic_destructors {

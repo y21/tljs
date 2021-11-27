@@ -5,7 +5,7 @@ edition = "2021"
 
 
 [dependencies]
-tl = { git = "https://github.com/y21/tl", branch = "next" }
+tl = "0.4.0"
 
 [lib]
 crate-type = ["cdylib"]

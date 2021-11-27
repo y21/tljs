@@ -1,5 +1,5 @@
 # tljs
-A very fast HTML5 parser for JavaScript.
+A very fast HTML5 parser for JavaScript. 
 
 ## Usage
 ```js
@@ -14,6 +14,7 @@ const dom = await tljs.parse(`
 
 console.log(dom.getElementById('img').asTag().attributes().get('src')); // image.png
 console.log(dom.getElementById('greeting').asTag().innerText()); // Hello World
+console.log(dom.querySelector('p#greeting').asTag().innerText()); // Hello World
 console.log(dom.version() === tljs.HTMLVersion.HTML5); // true
 
 // Free memory used by this document

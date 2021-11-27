@@ -118,6 +118,22 @@ function readVecVTable(ptr: number): [number, number, number] /* ptr, len, cap *
     });
 }
 
+function readNodeVecAndDrop<T>(dom: Dom, ptr: number): Array<Node> {
+    const [vptr, len] = readVecVTable(ptr);
+    const nodes = Array<Node>(len);
+
+    withMemory((dv) => {
+        for (let i = 0; i < len; i++) {
+            const nodeId = dv.getUint32(vptr + i * 4, true);
+            nodes[i] = new Node(dom, nodeId);
+        }
+    });
+
+    _wasm.drop_collection(ptr);
+
+    return nodes;
+}
+
 abstract class Resource {
     protected freed: boolean = false;
     protected ptr: number;
@@ -267,20 +283,36 @@ export class Dom extends Resource {
         // todo: this can be optimised a lot
         this.throwIfResourceFreed();
         const sptr = writeCStringChecked(className);
-        const collectionParts = _wasm.tl_dom_get_elements_by_class_name(this.ptr, sptr);
-        const [ptr, len] = readVecVTable(collectionParts);
-        const nodes = Array<Node>(len);
+        const vptr = _wasm.tl_dom_get_elements_by_class_name(this.ptr, sptr);
 
-        withMemory((dv) => {
-            for (let i = 0; i < len; i++) {
-                const nodeId = dv.getUint32(ptr + i * 4, true);
-                nodes[i] = new Node(this, nodeId);
-            }
-        });
+        return readNodeVecAndDrop(this, vptr);
+    }
 
-        _wasm.drop_collection(collectionParts);
+    /**
+     * Returns a handle to the HTML node that matches the given CSS selector
+     */
+    querySelector(selector: string) {
+        this.throwIfResourceFreed();
+        const sptr = writeCStringChecked(selector);
+        const maybeNodeIdPtr = _wasm.tl_dom_query_selector_single(this.ptr, sptr);
+        const [isSome, nodeId] = tryUnwrapPointerOption(maybeNodeIdPtr);
+        _wasm.drop_node_handle_option(maybeNodeIdPtr);
 
-        return nodes;
+        return isSome ? new Node(this, nodeId) : null;
+    }
+
+    /**
+     * Returns an array of handles to the HTML nodes that match the given CSS selector
+     */
+    querySelectorAll(selector: string) {
+        this.throwIfResourceFreed();
+        const sptr = writeCStringChecked(selector);
+        const vptr = _wasm.tl_dom_query_selector_all(this.ptr, sptr);
+        // null pointer means the selector failed to parse
+        // todo: maybe return a concrete error?
+        if (vptr === 0) return [];
+
+        return readNodeVecAndDrop(this, vptr);
     }
 
     /**

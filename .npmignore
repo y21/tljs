@@ -1,3 +1,4 @@
 bindings
 node_modules
 docs
+typedoc.json
