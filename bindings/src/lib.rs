@@ -12,7 +12,9 @@ type Dom = tl::VDomGuard<'static>;
 
 #[no_mangle]
 pub unsafe extern "C" fn tl_parse(ptr: *mut i8, opts: u8) -> *mut Dom {
-    let options = tl::ParserOptions::from_raw_checked(opts).unwrap();
+    let options = tl::ParserOptions::from_raw_checked(opts)
+        .unwrap()
+        .set_max_depth(256);
     let input = CString::from_raw(ptr).into_string().unwrap();
     let dom = tl::parse_owned(input, options);
     Box::into_raw(Box::new(dom))

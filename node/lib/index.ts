@@ -5,13 +5,18 @@ let initializerCallback: WasmBinaryCallback = defaultCallback;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export type WasmBinaryCallback = () => Promise<ArrayBuffer>;
+export type WasmBinaryCallback = (sync: boolean) => ArrayBuffer | Promise<ArrayBuffer>;
 
-function defaultCallback() {
+function defaultCallback(sync: boolean) {
     // @ts-ignore
-    const fs = require('fs/promises');
-    // @ts-ignore
-    return fs.readFile(`${__dirname}/bindings.wasm`);
+    const fs = require('fs');
+    const path = `${__dirname}/bindings.wasm`;
+
+    if (sync) {
+        return fs.readFileSync(path);
+    } else {
+        return fs.promises.readFile(path);
+    }
 }
 
 /**
@@ -29,9 +34,18 @@ export function setInitializerCallback(cb: WasmBinaryCallback) {
  * Attempts to initialize the WebAssembly module using the registered callback
  */
 export async function initializeWasm() {
-    const binary = await initializerCallback();
+    const binary = await initializerCallback(false);
     const module = await WebAssembly.instantiate(binary);
     _wasm = module.instance.exports as any;
+}
+
+/**
+ * Attempts to initialize the WebAssembly module using the registered callback in synchronously
+ */
+export function initializeWasmSync() {
+    const binary = initializerCallback(true) as ArrayBuffer;
+    const module = new WebAssembly.Instance(new WebAssembly.Module(binary));
+    _wasm = module.exports as any;
 }
 
 /**
@@ -147,6 +161,10 @@ abstract class Resource {
 
     throwIfResourceFreed() {
         if (this.freed) throw new Error('Attempted to use resource after it has been freed');
+    }
+
+    isFreed() {
+        return this.freed;
     }
 
     free() {
@@ -361,6 +379,7 @@ export class Dom extends Resource {
      */
     free() {
         super.free();
+        registry.unregister(this);
         _wasm.drop_dom(this.ptr);
     }
 }
@@ -522,6 +541,10 @@ function optionsToNumber(options: ParserOptions) {
     return flags;
 }
 
+const registry = new FinalizationRegistry((ptr: number) => {
+    _wasm.drop_dom(ptr);
+});
+
 /**
  * Parses a string into a DOM tree.
  * 
@@ -536,5 +559,7 @@ export async function parse(input: string, options: ParserOptions = {}): Promise
     const wasm = await getWasm();
     const ptr = writeCStringChecked(input);
     const dom = wasm.tl_parse(ptr, optionsToNumber(options));
-    return new Dom(dom);
+    const domHandle = new Dom(dom);
+    registry.register(domHandle, dom, domHandle);
+    return domHandle;
 }
