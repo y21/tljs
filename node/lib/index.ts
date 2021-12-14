@@ -70,15 +70,10 @@ function withMemory<T>(callback: (dv: DataView) => T): T {
     return callback(dv);
 }
 
-function assertNonNulByte(input: string) {
-    if (input.includes('\0')) throw new Error('Input string contains NUL byte');
-}
-
 function assertPointer(ptr: number, note: string) {
     if (ptr === 0) throw new Error(`Null pointer: \`${note}\``);
     else if (ptr < 0) throw new Error(`Negative pointer: \`${note}\``);
 }
-
 
 function readRustString(ptr: number, drop: boolean): string {
     const [dptr, len] = readSliceVTable(ptr);

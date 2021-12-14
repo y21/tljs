@@ -1,6 +1,6 @@
 {
   "name": "@y21/tljs",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "A very fast HTML5 parser",
   "main": "node/dist/index.js",
   "scripts": {
