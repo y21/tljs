@@ -4,7 +4,10 @@
   "description": "A very fast HTML5 parser",
   "main": "node/dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/runner.js",
+    "build-rust": "cd bindings && cargo b --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/bindings.wasm ../node/dist/",
+    "build-ts": "tsc",
+    "build": "npm run build-rust && npm run build-ts"
   },
   "keywords": [],
   "author": "",

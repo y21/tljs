@@ -79,32 +79,24 @@ function assertPointer(ptr: number, note: string) {
     else if (ptr < 0) throw new Error(`Negative pointer: \`${note}\``);
 }
 
-function writeCStringChecked(input: string): number {
-    assertNonNulByte(input);
-    input += '\0';
 
-    const buffer = encoder.encode(input);
-    const ptr = _wasm.alloc(buffer.length);
-    assertPointer(ptr, 'wasm.alloc(buffer.length)');
-    new Uint8Array(_wasm.memory.buffer).set(buffer, ptr);
-    return ptr;
+function readRustString(ptr: number, drop: boolean): string {
+    const [dptr, len] = readSliceVTable(ptr);
+    const buffer = new Uint8Array(_wasm.memory.buffer);
+    const slice = buffer.slice(dptr, dptr + len);
+    if (drop) {
+        _wasm.dealloc(dptr, len)
+    }
+    return decoder.decode(slice);
 }
 
-function readCString(ptr: number): string {
-    assertPointer(ptr, 'readCString(ptr)');
-    const buffer = new Uint8Array(_wasm.memory.buffer);
-    let end;
-    for (let i = 0; i < buffer.length; i++) {
-        if (buffer[i + ptr] === 0) {
-            end = i;
-            break;
-        }
-    }
-    if (end === undefined) throw new Error('Could not find NUL byte');
-    const slice = buffer.slice(ptr, end + ptr);
-    const string = decoder.decode(slice);
-    _wasm.drop_c_string(ptr);
-    return string;
+function writeRustString(input: string): [number, number] /* ptr, len */ {
+    const buffer = encoder.encode(input);
+    const len = buffer.length;
+    const ptr = _wasm.alloc(buffer.length);
+    assertPointer(ptr, 'wasm.alloc(len)');
+    new Uint8Array(_wasm.memory.buffer).set(buffer, ptr);
+    return [ptr, len];
 }
 
 function tryUnwrapPointerOption(optionPointer: number): [boolean, number] {
@@ -206,8 +198,8 @@ export class Node {
      */
     innerText() {
         this.dom.throwIfResourceFreed();
-        const sptr = _wasm.tl_node_inner_text(this.dom.getPointer(), this.id);
-        return readCString(sptr);
+        const ptr = _wasm.tl_node_inner_text(this.dom.getPointer(), this.id);
+        return readRustString(ptr, true);
     }
 
     /**
@@ -215,8 +207,8 @@ export class Node {
      */
     innerHTML() {
         this.dom.throwIfResourceFreed();
-        const sptr = _wasm.tl_node_inner_html(this.dom.getPointer(), this.id);
-        return readCString(sptr);
+        const ptr = _wasm.tl_node_inner_html(this.dom.getPointer(), this.id);
+        return readRustString(ptr, true);
     }
 
     /**
@@ -255,8 +247,8 @@ export class Tag extends Node {
      */
     name() {
         this.dom.throwIfResourceFreed();
-        const sptr = _wasm.tl_node_tag_name(this.dom.getPointer(), this.id);
-        return readCString(sptr);
+        const ptr = _wasm.tl_node_tag_name(this.dom.getPointer(), this.id);
+        return readRustString(ptr, true);
     }
 
     /**
@@ -275,8 +267,11 @@ export class Comment extends Node { }
  * The main DOM
  */
 export class Dom extends Resource {
-    constructor(ptr: number) {
+    private source: RustString;
+
+    constructor(ptr: number, source: RustString) {
         super(ptr);
+        this.source = source;
     }
 
     /**
@@ -286,8 +281,8 @@ export class Dom extends Resource {
      */
     getElementById(id: string) {
         this.throwIfResourceFreed();
-        const sptr = writeCStringChecked(id);
-        const maybeNodeIdPtr = _wasm.tl_dom_get_element_by_id(this.ptr, sptr);
+        const [sptr, slen] = writeRustString(id);
+        const maybeNodeIdPtr = _wasm.tl_dom_get_element_by_id(this.getPointer(), sptr, slen);
         const [isSome, nodeId] = tryUnwrapPointerOption(maybeNodeIdPtr);
         _wasm.drop_node_handle_option(maybeNodeIdPtr);
 
@@ -300,9 +295,8 @@ export class Dom extends Resource {
     getElementsByClassName(className: string) {
         // todo: this can be optimised a lot
         this.throwIfResourceFreed();
-        const sptr = writeCStringChecked(className);
-        const vptr = _wasm.tl_dom_get_elements_by_class_name(this.ptr, sptr);
-
+        const [sptr, slen] = writeRustString(className);
+        const vptr = _wasm.tl_dom_get_elements_by_class_name(this.getPointer(), sptr, slen);
         return readNodeVecAndDrop(this, vptr);
     }
 
@@ -311,8 +305,8 @@ export class Dom extends Resource {
      */
     querySelector(selector: string) {
         this.throwIfResourceFreed();
-        const sptr = writeCStringChecked(selector);
-        const maybeNodeIdPtr = _wasm.tl_dom_query_selector_single(this.ptr, sptr);
+        const [sptr, slen] = writeRustString(selector);
+        const maybeNodeIdPtr = _wasm.tl_dom_query_selector_single(this.ptr, sptr, slen);
         const [isSome, nodeId] = tryUnwrapPointerOption(maybeNodeIdPtr);
         _wasm.drop_node_handle_option(maybeNodeIdPtr);
 
@@ -324,8 +318,8 @@ export class Dom extends Resource {
      */
     querySelectorAll(selector: string) {
         this.throwIfResourceFreed();
-        const sptr = writeCStringChecked(selector);
-        const vptr = _wasm.tl_dom_query_selector_all(this.ptr, sptr);
+        const [sptr, slen] = writeRustString(selector);
+        const vptr = _wasm.tl_dom_query_selector_all(this.ptr, sptr, slen);
         // null pointer means the selector failed to parse
         // todo: maybe return a concrete error?
         if (vptr === 0) return [];
@@ -375,12 +369,43 @@ export class Dom extends Resource {
      * 
      * Calling this function will invalidate any handle that points to this DOM in any way.
      * Attempting to use a resource after it's been freed will throw an exception.
-     * You must call this function explicitly when you are done with the DOM.
      */
     free() {
         super.free();
-        registry.unregister(this);
         _wasm.drop_dom(this.ptr);
+        this.source.free();
+        domRegistry.unregister(this);
+    }
+}
+
+class RustString extends Resource {
+    private len: number;
+    private constructor(ptr: number, len: number) {
+        super(ptr);
+        this.len = len;
+    }
+
+    static from(input: string) {
+        const [ptr, len] = writeRustString(input);
+        const rst = new RustString(ptr, len);
+        stringRegistry.register(rst, { ptr, len }, rst);
+        return rst;
+    }
+
+    toJsString() {
+        const buffer = new Uint8Array(_wasm.memory.buffer);
+        const slice = buffer.slice(this.ptr, this.ptr + this.len);
+        return decoder.decode(slice);
+    }
+
+    getRawParts() {
+        return [this.ptr, this.len];
+    }
+
+    free() {
+        super.free();
+        _wasm.dealloc(this.ptr, this.len);
+        stringRegistry.unregister(this);
     }
 }
 
@@ -494,13 +519,13 @@ export class Attributes {
      */
     get(key: string) {
         this.dom.throwIfResourceFreed();
-        const sptr = writeCStringChecked(key);
-        const maybeValuePtr = _wasm.tl_node_tag_attributes_get(this.dom.getPointer(), this.nodeId, sptr);
+        const [sptr, slen] = writeRustString(key);
+        const maybeValuePtr = _wasm.tl_node_tag_attributes_get(this.dom.getPointer(), this.nodeId, sptr, slen);
         const [isSome, value] = tryUnwrapPointerOption(maybeValuePtr);
-        _wasm.drop_c_string_option(maybeValuePtr);
+        _wasm.drop_string_option(maybeValuePtr);
         if (!isSome) return null;
-        if (value === 0) return '';
-        return readCString(value);
+        if (value === 0) return "";
+        return readRustString(value, true);
     }
 }
 
@@ -541,8 +566,22 @@ function optionsToNumber(options: ParserOptions) {
     return flags;
 }
 
-const registry = new FinalizationRegistry((ptr: number) => {
-    _wasm.drop_dom(ptr);
+interface StringFinalizer {
+    ptr: number;
+    len: number;
+}
+
+interface DomFinalizer {
+    ptr: number;
+    source: RustString;
+}
+
+const stringRegistry = new FinalizationRegistry((value: StringFinalizer) => {
+    _wasm.dealloc(value.ptr, value.len);
+});
+
+const domRegistry = new FinalizationRegistry((value: DomFinalizer) => {
+    _wasm.drop_dom(value.ptr);
 });
 
 /**
@@ -557,9 +596,18 @@ export async function parse(input: string, options: ParserOptions = {}): Promise
     options.trackIds = options.trackIds ?? false;
 
     const wasm = await getWasm();
-    const ptr = writeCStringChecked(input);
-    const dom = wasm.tl_parse(ptr, optionsToNumber(options));
-    const domHandle = new Dom(dom);
-    registry.register(domHandle, dom, domHandle);
-    return domHandle;
+
+    // Allocate a rust string and get its raw parts
+    const rst = RustString.from(input);
+    const [sptr, slen] = rst.getRawParts();
+
+    // Pass the raw parts to the Rust parser
+    const domptr = wasm.tl_parse(sptr, slen, optionsToNumber(options));
+    const dom = new Dom(domptr, rst);
+    domRegistry.register(dom, {
+        ptr: domptr,
+        source: rst
+    }, dom);
+
+    return dom;
 }

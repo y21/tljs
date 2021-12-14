@@ -34,6 +34,6 @@ html-parser        : 33.3128 ms/file ± 25.5523
 saxes              : 50.4454 ms/file ± 140.833
 html5              : 112.382 ms/file ± 146.228
 ```
-Benchmarked against real world data using [AndreasMadsen/htmlparser-benchmark](https://github.com/AndreasMadsen/htmlparser-benchmark) (with slight modification to allow WebAssembly module instantiation before benchmarking)
+Benchmarked against real world data using [AndreasMadsen/htmlparser-benchmark](https://github.com/AndreasMadsen/htmlparser-benchmark).
 
 *Note: This benchmark only measures raw HTML parsing, not DOM interaction.*

@@ -2,3 +2,5 @@ bindings
 node_modules
 docs
 typedoc.json
+__test__
+test
