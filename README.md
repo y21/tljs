@@ -20,19 +20,20 @@ console.log(dom.version() === tljs.HTMLVersion.HTML5); // true
 
 ## Benchmark
 ```
-tl                 : 0.958690 ms/file ± 1.05525
-htmlparser2        : 2.29752 ms/file ± 3.98075
-html5parser        : 2.30177 ms/file ± 3.19532
-htmlparser2-dom    : 2.79198 ms/file ± 4.25506
-node-html-parser   : 2.83298 ms/file ± 2.08092
-neutron-html5parser: 3.22229 ms/file ± 2.16651
-html-dom-parser    : 3.73140 ms/file ± 5.57067
-htmljs-parser      : 5.91033 ms/file ± 7.45378
-parse5             : 9.41607 ms/file ± 7.15010
-htmlparser         : 16.8887 ms/file ± 107.539
-html-parser        : 33.3128 ms/file ± 25.5523
-saxes              : 50.4454 ms/file ± 140.833
-html5              : 112.382 ms/file ± 146.228
+tl                 : 0.867211 ms/file ± 0.712470
+htmlparser2        : 2.27647 ms/file ± 3.98507
+html5parser        : 2.73132 ms/file ± 3.67408
+node-html-parser   : 3.00771 ms/file ± 2.37876
+htmlparser2-dom    : 3.09740 ms/file ± 5.11558
+neutron-html5parser: 3.34103 ms/file ± 1.95397
+html-dom-parser    : 3.90582 ms/file ± 5.52262
+libxmljs           : 4.92904 ms/file ± 3.96175
+htmljs-parser      : 7.38788 ms/file ± 9.71039
+parse5             : 9.56172 ms/file ± 7.53395
+htmlparser         : 18.4444 ms/file ± 119.896
+html-parser        : 39.3015 ms/file ± 30.3498
+saxes              : 59.1015 ms/file ± 167.816
+html5              : 116.621 ms/file ± 150.214
 ```
 Benchmarked against real world data using [AndreasMadsen/htmlparser-benchmark](https://github.com/AndreasMadsen/htmlparser-benchmark).
 
