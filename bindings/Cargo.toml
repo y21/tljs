@@ -5,7 +5,7 @@ edition = "2021"
 
 
 [dependencies]
-tl = "0.4.2"
+tl = { version = "0.4.3", features = ["simd"] }
 
 [lib]
 crate-type = ["cdylib"]
