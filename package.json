@@ -15,5 +15,6 @@
   "devDependencies": {
     "@types/node": "^16.11.9",
     "typedoc": "^0.22.9"
-  }
+  },
+  "types": "node/dist/index.d.ts"
 }
