@@ -38,3 +38,16 @@ html5              : 116.621 ms/file ± 150.214
 Benchmarked against real world data using [AndreasMadsen/htmlparser-benchmark](https://github.com/AndreasMadsen/htmlparser-benchmark).
 
 *Note: This benchmark only measures raw HTML parsing, not DOM interaction.*
+
+## Using tl in the browser or other environments
+It's possible to use tljs in the browser or other restricted environments without access to the filesystem, although you need to override the WASM loading mechanism.
+By default, it attempts to load the .wasm blob using `require('fs')`, which is not supported in the browser.
+
+How you load the blob depends on your setup, but the general idea is the same everywhere. If you have a webserver that can serve the blob somewhere, you can use `fetch` to load it.
+```js
+tljs.setInitializerCallback(() => {
+    return fetch('/path/to/tl.wasm').then(x => x.arrayBuffer())
+});
+```
+It doesn't matter how you end up loading the blob - all you need to do is return an `ArrayBuffer` from the initializer callback containing the WebAssembly binary, and tljs will load it.
+This function is called once to initialize, and once initialized, it's cached and never called again.

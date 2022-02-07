@@ -13,13 +13,11 @@ type Dom = tl::VDom<'static>;
 
 #[no_mangle]
 pub unsafe extern "C" fn tl_parse(ptr: *const u8, len: usize, opts: u8) -> *mut Dom {
-    let options = tl::ParserOptions::from_raw_checked(opts)
-        .unwrap()
-        .set_max_depth(256);
+    let options = tl::ParserOptions::from_raw_checked(opts).expect("Invalid parser options");
 
     let slice = std::slice::from_raw_parts(ptr, len);
     let input = std::str::from_utf8_unchecked(slice);
-    let dom = tl::parse(input, options);
+    let dom = tl::parse(input, options).expect("Failed to parse");
 
     Box::into_raw(Box::new(dom))
 }
@@ -97,8 +95,13 @@ pub unsafe extern "C" fn tl_node_inner_html(
     } else {
         return std::ptr::null_mut();
     };
-    let inner_html = node.inner_html().as_utf8_str();
-    ExternalString::from_str_cloned(&inner_html).into_leaked_raw_parts()
+
+    let inner_html = match node {
+        tl::Node::Comment(c) => c,
+        tl::Node::Tag(t) => t.raw(),
+        tl::Node::Raw(r) => r,
+    };
+    ExternalString::from_str_cloned(&inner_html.as_utf8_str()).into_leaked_raw_parts()
 }
 
 #[no_mangle]
@@ -164,14 +167,10 @@ pub unsafe extern "C" fn tl_node_tag_attributes_get(
 
     let attributes = tag.attributes();
     let name = ExternalString::new(str_ptr, str_len);
-    let value = match name.as_str() {
-        "id" => attributes.id.as_ref().map(|id| id.as_utf8_str()),
-        "class" => attributes.class.as_ref().map(|class| class.as_utf8_str()),
-        _ => attributes
-            .raw
-            .get(&name.as_str().into())
-            .and_then(|x| x.as_ref().map(|x| x.as_utf8_str())),
-    };
+    let value = attributes
+        .get(name.as_str())
+        .flatten()
+        .map(|x| x.as_utf8_str());
 
     let value = value.map(|x| ExternalString::from_str_cloned(&x).into_leaked_raw_parts());
     Box::into_raw(Box::new(value.into()))
