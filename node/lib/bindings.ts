@@ -20,7 +20,7 @@ export interface WasmExports {
     tl_dom_subnodes: (ptr: number) => number;
     tl_dom_children: (ptr: number) => number;
     tl_dom_children_index: (slice_ptr: number, slice_len: number, at: number) => number;
-    drop_collection_vtable: (ptr: number) => void;
+    drop_slice_vtable: (ptr: number) => void;
     drop_collection: (ptr: number) => void;
     drop_c_string: (ptr: number) => void;
     drop_node_handle_option: (ptr: number) => void;

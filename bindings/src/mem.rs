@@ -30,9 +30,11 @@ impl ExternalString {
         std::mem::forget(self);
         parts
     }
-    pub unsafe fn as_str(&self) -> &str {
-        let slice = std::slice::from_raw_parts(self.0, self.1);
-        std::str::from_utf8_unchecked(slice)
+    pub fn as_str(&self) -> &str {
+        unsafe {
+            let slice = std::slice::from_raw_parts(self.0, self.1);
+            std::str::from_utf8_unchecked(slice)
+        }
     }
 }
 impl Drop for ExternalString {

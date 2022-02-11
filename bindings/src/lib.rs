@@ -253,7 +253,7 @@ macro_rules! define_generic_destructors {
 }
 
 define_generic_destructors! {
-    (drop_collection_vtable => *mut [usize; 2]),
+    (drop_slice_vtable => *mut [usize; 2]),
     (drop_node_handle_option => *mut FFIOption<tl::NodeHandle>),
     (drop_string_option => *mut FFIOption<*mut [usize; 2]>),
     (drop_dom => Dom)

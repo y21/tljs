@@ -12,3 +12,12 @@ impl<T> From<StdOption<T>> for FFIOption<T> {
         opt.map(FFIOption::Some).unwrap_or(FFIOption::None)
     }
 }
+
+// we are relying on this in JavaScript land
+const _ASSERT_SOME_DISCRIMINANT_ZERO: () = {
+    const SOME: FFIOption<()> = FFIOption::Some(());
+    const NUM: u32 = unsafe { std::mem::transmute::<_, u32>(SOME) };
+    if NUM != 0 {
+        panic!("FFIOption::Some has non-zero discriminant");
+    }
+};
