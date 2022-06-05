@@ -6,20 +6,16 @@ use tl::NodeHandle;
 
 mod mem;
 mod option;
-#[cfg(test)]
-mod tests;
 
 type Dom = tl::VDom<'static>;
 
 #[no_mangle]
 pub unsafe extern "C" fn tl_parse(ptr: *const u8, len: usize, opts: u8) -> *mut Dom {
-    let options = tl::ParserOptions::from_raw_checked(opts)
-        .unwrap()
-        .set_max_depth(256);
+    let options = tl::ParserOptions::from_raw_checked(opts).unwrap();
 
     let slice = std::slice::from_raw_parts(ptr, len);
     let input = std::str::from_utf8_unchecked(slice);
-    let dom = tl::parse(input, options);
+    let dom = tl::parse(input, options).expect("WASM strings cannot exceed u32::MAX");
 
     Box::into_raw(Box::new(dom))
 }
@@ -77,11 +73,12 @@ pub unsafe extern "C" fn tl_node_inner_text(
 ) -> *mut [usize; 2] {
     let dom = &*dom_ptr;
     let parser = dom.parser();
-    let node = if let Some(node) = dom.parser().resolve_node_id(id.get_inner()) {
-        node
-    } else {
-        return std::ptr::null_mut();
+
+    let node = match id.get(parser) {
+        Some(node) => node,
+        None => return std::ptr::null_mut()
     };
+    
     let inner_text = node.inner_text(parser);
     ExternalString::from_str_cloned(&inner_text).into_leaked_raw_parts()
 }
@@ -92,12 +89,14 @@ pub unsafe extern "C" fn tl_node_inner_html(
     id: tl::NodeHandle,
 ) -> *mut [usize; 2] {
     let dom = &*dom_ptr;
-    let node = if let Some(node) = dom.parser().resolve_node_id(id.get_inner()) {
-        node
-    } else {
-        return std::ptr::null_mut();
+    let parser = dom.parser();
+
+    let node = match id.get(parser) {
+        Some(node) => node,
+        None => return std::ptr::null_mut()
     };
-    let inner_html = node.inner_html().as_utf8_str();
+    
+    let inner_html = node.inner_html(parser);
     ExternalString::from_str_cloned(&inner_html).into_leaked_raw_parts()
 }
 
@@ -125,11 +124,13 @@ pub unsafe extern "C" fn tl_node_tag_name(
     id: tl::NodeHandle,
 ) -> *mut [usize; 2] {
     let dom = &*dom_ptr;
-    let node = if let Some(node) = dom.parser().resolve_node_id(id.get_inner()) {
-        node
-    } else {
-        return std::ptr::null_mut();
+    let parser = dom.parser();
+
+    let node = match id.get(parser) {
+        Some(node) => node,
+        None => return std::ptr::null_mut()
     };
+
     let name = node.as_tag().unwrap().name().as_utf8_str();
     ExternalString::from_str_cloned(&name).into_leaked_raw_parts()
 }
@@ -145,7 +146,65 @@ pub unsafe extern "C" fn tl_node_tag_attributes_count(
         .unwrap()
         .as_tag()
         .unwrap();
+        
     node.attributes().len()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tl_node_tag_attributes_insert(
+    dom_ptr: *mut Dom,
+    id: tl::NodeHandle,
+    key_ptr: *mut u8,
+    key_len: usize,
+    value_ptr: *mut u8,
+    value_len: usize
+) {
+    let dom = &mut *dom_ptr;
+    let parser = dom.parser_mut();
+    let key = {
+        let key = ExternalString::new(key_ptr, key_len).to_string();
+        tl::Bytes::try_from(key).unwrap()
+    };
+    let value = {
+        let value = ExternalString::new(value_ptr, value_len).to_string();
+        tl::Bytes::try_from(value).unwrap()
+    };
+
+    let attributes = id
+        .get_mut(parser)
+        .unwrap()
+        .as_tag_mut()
+        .unwrap()
+        .attributes_mut();
+
+    attributes.insert(key, Some(value));
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tl_node_tag_attributes_remove(
+    dom_ptr: *mut Dom,
+    id: tl::NodeHandle,
+    key_ptr: *mut u8,
+    key_len: usize
+) {
+    let dom = &mut *dom_ptr;
+    let parser = dom.parser_mut();
+    let key = ExternalString::new(key_ptr, key_len);
+
+    let attributes = id
+        .get_mut(parser)
+        .unwrap()
+        .as_tag_mut()
+        .unwrap()
+        .attributes_mut();
+
+    // Currently (as of 6/5) the lifetime requirement is unnecessarily too strict
+    // and requires a &'a str ('a being the input string lifetime, here 'static)
+    // for now we just transmute the lifetime, which is sound to do
+    // TODO: fix upstream Attributes::remove lifetime requirement
+    let attr_key = std::mem::transmute::<&str, &'static str>(key.as_str());
+
+    attributes.remove(attr_key);
 }
 
 #[no_mangle]
@@ -164,17 +223,16 @@ pub unsafe extern "C" fn tl_node_tag_attributes_get(
 
     let attributes = tag.attributes();
     let name = ExternalString::new(str_ptr, str_len);
-    let value = match name.as_str() {
-        "id" => attributes.id.as_ref().map(|id| id.as_utf8_str()),
-        "class" => attributes.class.as_ref().map(|class| class.as_utf8_str()),
-        _ => attributes
-            .raw
-            .get(&name.as_str().into())
-            .and_then(|x| x.as_ref().map(|x| x.as_utf8_str())),
-    };
+    let value = attributes.get(name.as_str()).flatten().map(|x| x.as_utf8_str());
 
     let value = value.map(|x| ExternalString::from_str_cloned(&x).into_leaked_raw_parts());
     Box::into_raw(Box::new(value.into()))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tl_dom_inner_html(dom_ptr: *mut Dom) -> *mut [usize; 2] {
+    let inner_html = (*dom_ptr).inner_html();
+    ExternalString::from_str_cloned(&inner_html).into_leaked_raw_parts()
 }
 
 #[no_mangle]

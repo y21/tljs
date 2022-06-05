@@ -17,9 +17,12 @@ export interface WasmExports {
     tl_node_tag_name: (ptr: number, id: number) => number;
     tl_node_tag_attributes_count: (ptr: number, id: number) => number;
     tl_node_tag_attributes_get: (ptr: number, id: number, str: number, str_len: number) => number;
+    tl_node_tag_attributes_insert: (ptr: number, id: number, kptr: number, klen: number, vptr: number, vlen: number) => void;
+    tl_node_tag_attributes_remove: (ptr: number, id: number, kptr: number, klen: number) => void;
     tl_dom_subnodes: (ptr: number) => number;
     tl_dom_children: (ptr: number) => number;
     tl_dom_children_index: (slice_ptr: number, slice_len: number, at: number) => number;
+    tl_dom_inner_html: (ptr: number) => number;
     drop_collection_vtable: (ptr: number) => void;
     drop_collection: (ptr: number) => void;
     drop_c_string: (ptr: number) => void;

@@ -13,7 +13,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^16.11.9",
+    "@types/node": "^16.11.38",
     "typedoc": "^0.22.9"
   },
   "types": "node/dist/index.d.ts"

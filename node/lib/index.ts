@@ -40,7 +40,7 @@ export async function initializeWasm() {
 }
 
 /**
- * Attempts to initialize the WebAssembly module using the registered callback in synchronously
+ * Attempts to initialize the WebAssembly module using the registered callback, synchronously
  */
 export function initializeWasmSync() {
     const binary = initializerCallback(true) as ArrayBuffer;
@@ -284,6 +284,16 @@ export class Dom extends Resource {
         return isSome ? new Node(this, nodeId) : null;
     }
 
+
+    /**
+     * Returns the inner HTML of this document.
+     */
+    innerHTML() {
+        this.throwIfResourceFreed();
+        const stringPtr = _wasm.tl_dom_inner_html(this.getPointer());
+        return readRustString(stringPtr, true);
+    }
+
     /**
      * Returns an array of nodes that match the given class name
      */
@@ -437,8 +447,55 @@ export abstract class Collection<T> {
         this.len = len;
     }
 
+    /**
+     * Copies all elements of this external collection to an array.
+     */
+    toArray(): T[] {
+        const arr = [];
+        for (let i = 0; i < this.len; i++) {
+            arr.push(this.at(i)!);
+        }
+        return arr;
+    }
+
+    /**
+     * Returns the number of elements in this collection
+     */
+    length() {
+        return this.len;
+    }
+
     abstract at(index: number): T | null;
-    abstract length(): number;
+
+    [Symbol.iterator](): Iterator<T> {
+        return new CollectionIter(this);
+    }
+}
+
+/**
+ * An iterator over elements in an external collection
+ */
+export class CollectionIter<T> implements Iterator<T>, Iterable<T> {
+    private collection: Collection<T>;
+    private index = 0;
+    constructor(collection: Collection<T>) {
+        this.collection = collection;
+    }
+
+    next(): IteratorResult<T> {
+        if (this.index >= this.collection.length()) {
+            return { value: undefined, done: true };
+        } else {
+            return {
+                value: this.collection.at(this.index++)!,
+                done: false
+            };
+        }
+    }
+
+    [Symbol.iterator]() {
+        return this;
+    }
 }
 
 /**
@@ -457,13 +514,6 @@ export class ChildrenCollection extends Collection<Node> {
         const nodeId = _wasm.tl_dom_children_index(this.ptr, this.len, index);
         return new Node(this.dom, nodeId);
     }
-
-    /**
-     * Returns the number of nodes in the collection.
-     */
-    length() {
-        return this.len;
-    }
 }
 
 /**
@@ -480,13 +530,6 @@ export class GlobalNodeCollection extends Collection<Node> {
     at(index: number) {
         if (index < 0 || index >= this.len) return null;
         return new Node(this.dom, index);
-    }
-
-    /**
-     * Returns the number of nodes in the collection
-     */
-    length() {
-        return this.len;
     }
 }
 
@@ -521,6 +564,32 @@ export class Attributes {
         if (!isSome) return null;
         if (value === 0) return "";
         return readRustString(value, true);
+    }
+
+    /**
+     * Inserts a key-value pair into this attributes storage
+     */
+    insert(key: string, value: string) {
+        this.dom.throwIfResourceFreed();
+        const [kptr, klen] = writeRustString(key);
+        const [vptr, vlen] = writeRustString(value);
+        _wasm.tl_node_tag_attributes_insert(
+            this.dom.getPointer(),
+            this.nodeId,
+            kptr,
+            klen,
+            vptr,
+            vlen
+        );
+    }
+
+    /**
+     * Removes a key-value pair
+     */
+    remove(key: string) {
+        this.dom.throwIfResourceFreed();
+        const [kptr, klen] = writeRustString(key);
+        _wasm.tl_node_tag_attributes_remove(this.dom.getPointer(), this.nodeId, kptr, klen);
     }
 }
 
@@ -594,10 +663,10 @@ export async function parse(input: string, options: ParserOptions = {}): Promise
 
     // Allocate a rust string and get its raw parts
     const rst = RustString.from(input);
-    const [sptr, slen] = rst.getRawParts();
+    const parts = rst.getRawParts();
 
     // Pass the raw parts to the Rust parser
-    const domptr = wasm.tl_parse(sptr, slen, optionsToNumber(options));
+    const domptr = wasm.tl_parse(parts[0], parts[1], optionsToNumber(options));
     const dom = new Dom(domptr, rst);
     domRegistry.register(dom, {
         ptr: domptr,
